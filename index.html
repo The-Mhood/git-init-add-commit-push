@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scientific Calculator</title>
+<style>
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(160deg, #1b2333, #0e1320);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .calculator {
+    width: min(96vw, 760px);
+    background: #171d29;
+    padding: 16px;
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  }
+
+  .display {
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+    gap: 6px;
+    padding: 8px 10px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    margin-bottom: 14px;
+    position: relative;
+  }
+
+  .chip {
+    position: absolute;
+    top: 4px;
+    left: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: #ff9f0a;
+    background: rgba(255, 159, 10, 0.12);
+    border: 1px solid rgba(255, 159, 10, 0.35);
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .expression {
+    color: #7f8db0;
+    font-size: 17px;
+    line-height: 1.35;
+    max-width: 100%;
+    min-height: 22px;
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    direction: rtl;
+  }
+
+  .expression span { direction: ltr; unicode-bidi: bidi-override; }
+
+  .current {
+    color: #ffffff;
+    font-size: 44px;
+    font-weight: 300;
+    letter-spacing: 0.5px;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+
+  .current.error {
+    color: #ff6b6b;
+    font-size: 30px;
+    font-weight: 500;
+  }
+
+  .board { display: grid; gap: 12px; }
+
+  @media (min-width: 640px) {
+    .board { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); }
+    .sci-pad { grid-template-columns: repeat(3, 1fr) !important; }
+  }
+
+  .sci-pad { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .core-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+
+  button {
+    appearance: none;
+    border: 0;
+    border-radius: 14px;
+    height: 52px;
+    padding: 0;
+    font-family: inherit;
+    font-size: 19px;
+    font-weight: 500;
+    color: #eef2ff;
+    background: #2b3550;
+    cursor: pointer;
+    transition: filter 0.12s ease, transform 0.06s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    line-height: 1;
+  }
+
+  @media (min-width: 640px) {
+    .sci-pad button { height: 48px; }
+  }
+
+  button:active { transform: scale(0.95); filter: brightness(1.5); }
+
+  @media (hover: hover) {
+    button:hover { filter: brightness(1.22); }
+  }
+
+  button.fn {
+    background: #262f45;
+    color: #aeb9d8;
+    font-size: 16px;
+  }
+
+  button.sci {
+    background: #1f2840;
+    color: #cdd9f5;
+    font-size: 17px;
+    font-weight: 600;
+  }
+
+  button.op {
+    background: #ff9f0a;
+    color: #ffffff;
+    font-size: 25px;
+    font-weight: 400;
+  }
+
+  button.op.active {
+    background: #ffffff;
+    color: #ff9f0a;
+  }
+
+  button.eq {
+    background: #ff9f0a;
+    color: #ffffff;
+    font-size: 25px;
+    font-weight: 400;
+  }
+
+  button.zero { grid-column: span 2; }
+
+  button[data-act="shift"].active,
+  button[data-act="unit"].active {
+    background: #ff9f0a;
+    color: #1a1202;
+  }
+
+  button:focus-visible {
+    outline: 2px solid #ff9f0a;
+    outline-offset: 2px;
+  }
+</style>
+</head>
+<body>
+  <main class="calculator" role="application" aria-label="Scientific calculator">
+    <div class="display" aria-live="polite">
+      <span class="chip" id="unitChip">DEG</span>
+      <div class="expression" id="expression"><span></span></div>
+      <div class="current" id="current">0</div>
+    </div>
+    <div class="board">
+      <div class="sci-pad">
+        <button class="sci" data-act="shift" aria-label="Second function">2nd</button>
+        <button class="sci" data-act="unit" aria-label="Toggle degrees and radians">DEG</button>
+        <button class="sci" data-act="fact" aria-label="Factorial">n!</button>
+
+        <button class="sci" data-act="func" data-name="sin" id="k-sin">sin</button>
+        <button class="sci" data-act="func" data-name="cos" id="k-cos">cos</button>
+        <button class="sci" data-act="func" data-name="tan" id="k-tan">tan</button>
+
+        <button class="sci" data-act="func" data-name="ln" id="k-ln">ln</button>
+        <button class="sci" data-act="func" data-name="log" id="k-log">log</button>
+        <button class="sci" data-act="const" data-value="pi" aria-label="Pi">π</button>
+
+        <button class="sci" data-act="sq" aria-label="Square">x²</button>
+        <button class="sci" data-act="cube" aria-label="Cube">x³</button>
+        <button class="sci" data-act="pow" aria-label="Power">x^y</button>
+
+        <button class="sci" data-act="root" aria-label="Square root">√</button>
+        <button class="sci" data-act="inv" aria-label="Reciprocal">1/x</button>
+        <button class="sci" data-act="const" data-value="e" aria-label="Euler number">e</button>
+
+        <button class="sci" data-act="paren" data-value="(" aria-label="Open parenthesis">(</button>
+        <button class="sci" data-act="paren" data-value=")" aria-label="Close parenthesis">)</button>
+        <button class="sci" data-act="pm" aria-label="Negate">±</button>
+      </div>
+
+      <div class="core-pad">
+        <button class="fn" data-key="Escape" aria-label="Clear all">C</button>
+        <button class="fn" data-key="Backspace" aria-label="Delete last entry">&#9003;</button>
+        <button class="fn" data-key="%" aria-label="Percent">%</button>
+        <button class="op" data-key="/" aria-label="Divide">&#247;</button>
+
+        <button data-key="7">7</button>
+        <button data-key="8">8</button>
+        <button data-key="9">9</button>
+        <button class="op" data-key="*" aria-label="Multiply">&#215;</button>
+
+        <button data-key="4">4</button>
+        <button data-key="5">5</button>
+        <button data-key="6">6</button>
+        <button class="op" data-key="-" aria-label="Subtract">&#8722;</button>
+
+        <button data-key="1">1</button>
+        <button data-key="2">2</button>
+        <button data-key="3">3</button>
+        <button class="op" data-key="+" aria-label="Add">+</button>
+
+        <button class="zero" data-key="0">0</button>
+        <button data-key="." aria-label="Decimal point">.</button>
+        <button class="eq" data-key="=" aria-label="Equals">=</button>
+      </div>
+    </div>
+  </main>
+
+<script>
+  (function () {
+    "use strict";
+
+    const currentEl = document.getElementById("current");
+    const exprLineEl = document.getElementById("expression").firstElementChild;
+    const unitChip = document.getElementById("unitChip");
+
+    /* ---------------- state ---------------- */
+
+    let expr = "";            // expression as typed (ASCII tokens)
+    let exprDone = false;     // true right after "="
+    let lastResult = 0;
+    let errorState = false;
+    let radMode = false;      // DEG by default
+    let shiftOn = false;      // 2nd-function mode
+
+    const SHIFT = {
+      sin: { name: "asin", label: "sin⁻¹" },
+      cos: { name: "acos", label: "cos⁻¹" },
+      tan: { name: "atan", label: "tan⁻¹" },
+      ln:  { name: "exp",  label: "eˣ" },
+      log: { name: "pow10", label: "10ˣ" }
+    };
+
+    /* ---------------- helpers ---------------- */
+
+    function round12(n) { return parseFloat(n.toPrecision(12)); }
+
+    function pretty(n) {
+      if (!Number.isFinite(n)) return "Error";
+      const r = round12(n);
+      if (Math.abs(r) >= 1e12 || (r !== 0 && Math.abs(r) < 1e-9)) {
+        return r.toExponential(7).replace(/(\.\d*?)0+e/, "$1e");
+      }
+      return String(r);
+    }
+
+    // Scan parens; classify each "(" as function-introduced or user-introduced.
+    function scanParens(s) {
+      const FN = new Set(["sin", "cos", "tan", "asin", "acos", "atan",
+                          "ln", "log", "exp", "pow10", "sqrt", "cbrt", "rdiv"]);
+      const stack = []; // 'f' | 'u'
+      let word = "";
+      for (const ch of s) {
+        if (/[a-z0-9]/.test(ch)) { word += ch; continue; }
+        if (ch === "(") { stack.push(FN.has(word) ? "f" : "u"); word = ""; }
+        else if (ch === ")") { stack.pop(); word = ""; }
+        else word = "";
+      }
+      return {
+        stack: stack,
+        fn: stack.filter(t => t === "f").length,
+        total: stack.length
+      };
+    }
+
+    // Trailing operand that is currently being typed (digits and one dot,
+    // with an optional unary minus in front).
+    function getTail(s) {
+      let i = s.length;
+      while (i > 0 && /[0-9.]/.test(s[i - 1])) i--;
+      let start = i;
+      if (i > 0 && s[i - 1] === "-" &&
+          (i === 1 || "+-*/^(".includes(s[i - 2]))) {
+        start = i - 1; // include unary minus
+      }
+      return { text: s.slice(start), start: start };
+    }
+
+    function lastCharIsOp() { return expr !== "" && "+-*/^".includes(expr[expr.length - 1]); }
+
+    function prettyExpr(s) {
+      return s
+        .replace(/pow10\(/g, "10^(")
+        .replace(/rdiv\(/g, "1/(")
+        .replace(/exp\(/g, "e^(")
+        .replace(/sqrt\(/g, "√(")
+        .replace(/cbrt\(/g, "∛(")
+        .replace(/pi/g, "π")
+        .replace(/\*/g, "×")
+        .replace(/\//g, "÷")
+        .replace(/-/g, "−");
+    }
+
+    /* ---------------- input builders ---------------- */
+
+    function resetAll() {
+      expr = "";
+      exprDone = false;
+      errorState = false;
+      lastResult = 0;
+    }
+
+    function startFromResult() {
+      if (exprDone) {
+        expr = pretty(lastResult);
+        exprDone = false;
+      }
+    }
+
+    // Append text with an implicit multiplication sign where needed.
+    function appendToken(s) {
+      const atomStart = /^[0-9.]/.test(s) || /^[a-z]/.test(s) || s[0] === "(";
+      const atomEnd = /[0-9.)a-z]/.test(expr[expr.length - 1]);
+      if (expr !== "" && atomEnd && atomStart && !lastCharIsOp()) {
+        expr += "*";
+      }
+      expr += s;
+    }
+
+    // A binary operator is about to be typed: close open function parens whose
+    // argument is complete, but stay inside user parens.
+    function prepareForOperator(op) {
+      startFromResult();
+      const scan = scanParens(expr);
+      if (expr !== "" && expr[expr.length - 1] === "(") {
+        // right after an open paren — only a unary minus makes sense
+        if (op === "-") expr += "-";
+        return;
+      }
+      if (scan.stack[scan.stack.length - 1] === "f") {
+        expr += ")".repeat(scan.fn); // finish function argument(s)
+      }
+    }
+
+    function insertOperator(op) {
+      prepareForOperator(op);
+      if (expr === "") {
+        if (op === "-") expr = "-";
+        return;
+      }
+      // drop a pending unary minus before switching to another operator
+      if (expr[expr.length - 1] === "-") {
+        if (op === "-") return;
+        expr = expr.slice(0, -1);
+        if (expr === "") { if (op === "-") expr = "-"; return; }
+        if ("+-*/^".includes(expr[expr.length - 1])) {
+          expr = expr.slice(0, -1) + op; // replace the earlier operator
+          return;
+        }
+      }
+      const last = expr[expr.length - 1];
+      if ("+-*/^".includes(last)) {
+        if (op === "-") expr += "-";      // unary minus after an operator
+        else expr = expr.slice(0, -1) + op; // replace trailing operator
+      } else {
+        expr += op;
+      }
+    }
+
+    function inputDigit(d) {
+      if (errorState) resetAll();
+      if (exprDone) { expr = ""; exprDone = false; }
+      if (expr === "" && d === "0") { expr = "0"; return; }
+      if (expr === "-" && d === "0") { expr = "-0"; return; }
+      const last = expr[expr.length - 1];
+      if (expr !== "" && /[a-z]/.test(last)) expr += "*"; // pi, e followed by digit
+      expr += d;
+    }
+
+    function inputDecimal() {
+      if (errorState) resetAll();
+      if (exprDone) { expr = ""; exprDone = false; }
+      if (expr === "" || lastCharIsOp() ||
+          expr[expr.length - 1] === "(") {
+        expr += "0.";
+        return;
+      }
+      const tail = getTail(expr);
+      if (!tail.text.includes(".")) expr += ".";
+    }
+
+    function inputConstant(name) {
+      if (errorState) resetAll();
+      startFromResult();
+      appendToken(name === "pi" ? "pi" : "e");
+    }
+
+    // Unary scientific keys that apply immediately to the current operand:
+    // x², x³, √ (with an operand), 1/x, n!, %
+    function applyUnary(fn) {
+      startFromResult();
+      if (expr === "") return;
+      const tail = getTail(expr);
+      if (tail.text === "") return;
+      let n = parseFloat(tail.text);
+      if (!Number.isFinite(n)) return;
+      const res = fn(n);
+      if (!Number.isFinite(res)) { fail(); return; }
+      expr = expr.slice(0, tail.start) + pretty(res);
+      exprDone = false;
+    }
+
+    // Prefix functions (sin, cos, ln, ...): wrap the operand being typed,
+    // otherwise open a new function call.
+    function insertFunc(name) {
+      if (errorState) resetAll();
+      startFromResult();
+      let tail = getTail(expr);
+      const scan = scanParens(expr);
+
+      if (expr === "") { expr = name + "("; return; }
+      if (expr[expr.length - 1] === "(") {
+        // nested immediately after an open paren (e.g. sin(cos( ...)
+        expr += name + "(";
+        return;
+      }
+      if (scan.stack[scan.stack.length - 1] === "f") {
+        // finish the current function argument, then start a new one
+        expr += ")".repeat(scan.fn);
+        tail = getTail(expr);
+      }
+      if (tail.text !== "") {
+        expr = expr.slice(0, tail.start) + name + "(" + tail.text;
+      } else {
+        appendToken(name + "(");
+      }
+    }
+
+    function inputParen(kind) {
+      if (errorState) resetAll();
+      startFromResult();
+      if (kind === "(") {
+        appendToken("(");
+      } else {
+        const scan = scanParens(expr);
+        if (scan.total > 0) expr += ")";
+      }
+    }
+
+    function negate() {
+      startFromResult();
+      if (expr === "") { expr = "-"; return; }
+      const tail = getTail(expr);
+      if (tail.text !== "") {
+        const s = tail.start;
+        if (expr[s] === "-") expr = expr.slice(0, s) + expr.slice(s + 1);
+        else expr = expr.slice(0, s) + "-" + expr.slice(s);
+        return;
+      }
+      const last = expr[expr.length - 1];
+      if (last === "-") expr = expr.slice(0, -1);
+      else if ("+-*/^(".includes(last)) expr += "-";
+    }
+
+    function backspace() {
+      if (errorState) { resetAll(); return; }
+      if (exprDone) return;
+      expr = expr.slice(0, -1);
+    }
+
+    /* ---------------- evaluation ---------------- */
+
+    function tokenize(s) {
+      const toks = [];
+      let i = 0;
+      while (i < s.length) {
+        const ch = s[i];
+        if (/[0-9.]/.test(ch)) {
+          let j = i;
+          while (j < s.length && /[0-9.]/.test(s[j])) j++;
+          const num = s.slice(i, j);
+          if ((num.match(/\./g) || []).length > 1) throw new Error("bad number");
+          toks.push({ t: "num", v: num });
+          i = j;
+        } else if (/[a-z]/.test(ch)) {
+          let j = i;
+          while (j < s.length && /[a-z0-9]/.test(s[j])) j++;
+          let name = s.slice(i, j);
+          i = j;
+          if (s[i] === "(") { toks.push({ t: "func", v: name }); i++; }
+          else toks.push({ t: "const", v: name });
+        } else if ("+-*/^".includes(ch)) {
+          toks.push({ t: "op", v: ch });
+          i++;
+        } else if (ch === "(" || ch === ")") {
+          toks.push({ t: "paren", v: ch });
+          i++;
+        } else if (ch === "!") {
+          toks.push({ t: "bang", v: "!" });
+          i++;
+        } else {
+          throw new Error("bad token");
+        }
+      }
+      return toks;
+    }
+
+    function makeParser(toks) {
+      let i = 0;
+      const peek = () => toks[i];
+      const isAtomStart = (tk) => tk && (tk.t === "num" || tk.t === "const" ||
+        tk.t === "func" || (tk.t === "paren" && tk.v === "("));
+
+      function expr() {
+        let v = term();
+        while (peek() && peek().t === "op" && (peek().v === "+" || peek().v === "-")) {
+          const op = toks[i++].v;
+          const r = term();
+          v = op === "+" ? v + r : v - r;
+        }
+        return v;
+      }
+
+      function term() {
+        let v = unary();
+        for (;;) {
+          const tk = peek();
+          if (tk && tk.t === "op" && (tk.v === "*" || tk.v === "/")) {
+            i++;
+            const r = unary();
+            v = tk.v === "*" ? v * r : v / r;
+          } else if (tk && isAtomStart(tk)) {
+            v *= unary(); // implicit multiplication (2π, 3(4+5))
+          } else {
+            break;
+          }
+        }
+        return v;
+      }
+
+      function unary() {
+        const tk = peek();
+        if (tk && tk.t === "op" && tk.v === "-") { i++; return -unary(); }
+        return power();
+      }
+
+      function power() {
+        let v = postfix();
+        const tk = peek();
+        if (tk && tk.t === "op" && tk.v === "^") {
+          i++;
+          const e = unary();
+          v = Math.pow(v, e);
+        }
+        return v;
+      }
+
+      function postfix() {
+        let v = atom();
+        const tk = peek();
+        if (tk && tk.t === "bang") { i++; v = factorial(v); }
+        return v;
+      }
+
+      function factorial(n) {
+        if (n < 0 || !Number.isInteger(n)) throw new Error("factorial domain");
+        let r = 1;
+        for (let k = 2; k <= n; k++) r *= k;
+        return r;
+      }
+
+      function atom() {
+        const tk = peek();
+        if (!tk) throw new Error("unexpected end");
+        if (tk.t === "num") { i++; return parseFloat(tk.v); }
+        if (tk.t === "const") {
+          i++;
+          if (tk.v === "pi") return Math.PI;
+          if (tk.v === "e") return Math.E;
+          throw new Error("unknown constant");
+        }
+        if (tk.t === "paren") {
+          if (tk.v !== "(") throw new Error("unexpected )");
+          i++;
+          const v = expr();
+          const close = peek();
+          if (!close || close.t !== "paren" || close.v !== ")") throw new Error("missing )");
+          i++;
+          return v;
+        }
+        if (tk.t === "func") {
+          i++;
+          const arg = expr();
+          const close = peek();
+          if (!close || close.t !== "paren" || close.v !== ")") throw new Error("missing )");
+          i++;
+          return applyFn(tk.v, arg);
+        }
+        throw new Error("syntax");
+      }
+
+      return { expr: expr, at: () => i };
+    }
+
+    const angle = (x) => radMode ? x : x * Math.PI / 180;
+
+    function applyFn(name, x) {
+      switch (name) {
+        case "sin":  return Math.sin(angle(x));
+        case "cos":  return Math.cos(angle(x));
+        case "tan":  return Math.tan(angle(x));
+        case "asin": return radMode ? Math.asin(x) : Math.asin(x) * 180 / Math.PI;
+        case "acos": return radMode ? Math.acos(x) : Math.acos(x) * 180 / Math.PI;
+        case "atan": return radMode ? Math.atan(x) : Math.atan(x) * 180 / Math.PI;
+        case "ln":   return Math.log(x);
+        case "log":  return Math.log10(x);
+        case "exp":  return Math.exp(x);
+        case "pow10": return Math.pow(10, x);
+        case "sqrt": return Math.sqrt(x);
+        case "cbrt": return Math.cbrt(x);
+        case "rdiv": return 1 / x;
+      }
+      throw new Error("unknown function");
+    }
+
+    function evaluate(s) {
+      // balance: append missing closing parens
+      const diff = (s.match(/\(/g) || []).length - (s.match(/\)/g) || []).length;
+      if (diff < 0) throw new Error("extra )");
+      const balanced = s + ")".repeat(diff);
+      const toks = tokenize(balanced);
+      const parser = makeParser(toks);
+      const result = parser.expr();
+      if (parser.at() !== toks.length) throw new Error("trailing input");
+      if (!Number.isFinite(result)) throw new Error("not finite");
+      return { value: round12(result), display: balanced };
+    }
+
+    function equals() {
+      if (errorState || expr === "") return;
+      try {
+        const { value, display } = evaluate(expr);
+        exprDone = true;
+        expr = display;
+        lastResult = value;
+        syncDisplay();
+      } catch (err) {
+        fail();
+      }
+    }
+
+    function fail() {
+      errorState = true;
+      expr = "";
+      exprDone = false;
+      currentEl.textContent = "Error";
+      currentEl.classList.add("error");
+      exprLineEl.textContent = "";
+    }
+
+    /* ---------------- display ---------------- */
+
+    function syncDisplay() {
+      if (errorState) {
+        currentEl.classList.add("error");
+        return;
+      }
+      currentEl.classList.remove("error");
+
+      let big;
+      let line;
+      if (exprDone) {
+        big = pretty(lastResult);
+        line = prettyExpr(expr) + " =";
+      } else if (expr === "") {
+        big = "0";
+        line = "";
+      } else {
+        const tail = getTail(expr);
+        if (tail.text !== "") big = tail.text;
+        else if (expr[expr.length - 1] === ")") big = "";
+        else if (/[a-z]$/.test(expr)) big = expr.endsWith("pi") ? "π" : expr.endsWith("e") ? "e" : "";
+        else big = "";
+        if (big === "") big = "0";
+        line = prettyExpr(expr);
+      }
+      currentEl.textContent = big;
+      exprLineEl.textContent = line;
+
+      // highlight the active operator
+      document.querySelectorAll("[data-key]").forEach(b => {
+        const k = b.dataset.key;
+        let on = false;
+        if (exprDone) on = false;
+        else if (expr !== "" && /[0-9.)a-z]$/.test(expr)) on = false;
+        else if (expr !== "" && "+-*/^".includes(expr[expr.length - 1])) {
+          on = k === expr[expr.length - 1];
+        }
+        b.classList.toggle("active", on);
+      });
+      refreshUnit();
+    }
+
+    function refreshUnit() {
+      unitChip.textContent = radMode ? "RAD" : "DEG";
+      const unitBtn = document.querySelector('[data-act="unit"]');
+      if (unitBtn) unitBtn.textContent = radMode ? "RAD" : "DEG";
+    }
+
+    function refreshShiftLabels() {
+      for (const [base, info] of Object.entries(SHIFT)) {
+        const btn = document.getElementById("k-" + base);
+        if (btn) btn.textContent = shiftOn ? info.label : base;
+      }
+      document.querySelector('[data-act="shift"]').classList.toggle("active", shiftOn);
+    }
+
+    /* ---------------- actions ---------------- */
+
+    const FUNCS = ["sin", "cos", "tan", "asin", "acos", "atan",
+                   "ln", "log", "exp", "pow10", "sqrt", "cbrt", "rdiv"];
+
+    function runAction(act, detail) {
+      if (act === "clear") { resetAll(); }
+      else if (act === "back") { backspace(); }
+      else if (act === "digit") { inputDigit(detail); }
+      else if (act === "dot") { inputDecimal(); }
+      else if (act === "op") { insertOperator(detail); }
+      else if (act === "eq") { equals(); }
+      else if (act === "const") { inputConstant(detail); }
+      else if (act === "paren") { inputParen(detail); }
+      else if (act === "shift") { shiftOn = !shiftOn; refreshShiftLabels(); }
+      else if (act === "unit") { radMode = !radMode; }
+      else if (act === "sq") { applyUnary(n => n * n); }
+      else if (act === "cube") { applyUnary(n => n * n * n); }
+      else if (act === "root") {
+        const tail = getTail(expr);
+        const end = expr === "" ? "" : expr[expr.length - 1];
+        if (tail.text === "" &&
+            (expr === "" || end === ")" || "+-*/^(".includes(end))) {
+          insertFunc("sqrt");
+        } else {
+          applyUnary(n => Math.sqrt(n));
+        }
+      }
+      else if (act === "pow") { insertOperator("^"); }
+      else if (act === "inv") {
+        const tail = getTail(expr);
+        if (expr === "" || (tail.text === "" &&
+            (expr[expr.length - 1] === ")" || lastCharIsOp() ||
+             expr[expr.length - 1] === "("))) {
+          insertFunc("rdiv");
+        } else {
+          applyUnary(n => 1 / n);
+        }
+      }
+      else if (act === "fact") {
+        const tail = getTail(expr);
+        if (expr === "" || (tail.text === "" &&
+            (expr[expr.length - 1] === ")" || lastCharIsOp() ||
+             expr[expr.length - 1] === "("))) {
+          return; // nothing to factor
+        }
+        applyUnary(n => {
+          if (n < 0 || !Number.isInteger(n) || n > 170) return NaN;
+          let r = 1;
+          for (let k = 2; k <= n; k++) r *= k;
+          return r;
+        });
+      }
+      else if (act === "pm") { negate(); }
+      else if (act === "func") {
+        let name = detail;
+        if (shiftOn && SHIFT[name]) name = SHIFT[name].name;
+        insertFunc(name);
+        if (shiftOn && SHIFT[detail]) shiftOn = false;
+        refreshShiftLabels();
+      }
+      else if (act === "pct") {
+        startFromResult();
+        const tail = getTail(expr);
+        if (tail.text === "") return;
+        const n = parseFloat(tail.text);
+        expr = expr.slice(0, tail.start) + pretty(n / 100);
+      }
+      if (act !== "shift" && act !== "unit") refreshShiftLabels();
+      syncDisplay();
+    }
+
+    /* ---------------- wiring ---------------- */
+
+    document.querySelectorAll("[data-key]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const k = btn.dataset.key;
+        if (/^\d$/.test(k)) runAction("digit", k);
+        else if (k === ".") runAction("dot");
+        else if (k === "+" || k === "-" || k === "*" || k === "/") runAction("op", k);
+        else if (k === "%") runAction("pct");
+        else if (k === "=") runAction("eq");
+        else if (k === "Escape") runAction("clear");
+        else if (k === "Backspace") runAction("back");
+      });
+    });
+
+    document.querySelectorAll(".sci-pad button").forEach(btn => {
+      btn.addEventListener("click", () => {
+        runAction(btn.dataset.act, btn.dataset.name || btn.dataset.value || btn.dataset.act);
+      });
+    });
+
+    window.addEventListener("keydown", e => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      let k = e.key;
+      if (k === "Enter") k = "=";
+      if (k === "x" || k === "X" || k === "×") k = "*";
+      if (k === "÷") k = "/";
+      if (k === "−") k = "-";
+      const digit = /^\d$/.test(k);
+      const simple = ["+", "-", "*", "/", "%", "=", "(", ")", "^", "!", ".", "Escape", "Backspace"].includes(k);
+      if (!digit && !simple) return;
+      e.preventDefault();
+      if (digit) runAction("digit", k);
+      else if (k === ".") runAction("dot");
+      else if (k === "(" || k === ")") runAction("paren", k);
+      else if (k === "+" || k === "-" || k === "*" || k === "/" || k === "^") runAction("op", k === "^" ? "^" : k);
+      else if (k === "%") runAction("pct");
+      else if (k === "!") runAction("fact");
+      else if (k === "=") runAction("eq");
+      else if (k === "Escape") runAction("clear");
+      else if (k === "Backspace") runAction("back");
+    });
+
+    syncDisplay();
+    refreshUnit();
+    refreshShiftLabels();
+  })();
+</script>
+</body>
+</html>
